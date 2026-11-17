@@ -1,39 +1,22 @@
 """
-用 microstructure-ve (plastic 分支, DOLFINx 后端) 复现已有的 ABAQUS bilinear
-elastoplastic 结果，用于验证该代码库是否能得到同样的应力-应变曲线。
+用 microstructure_ve (plastic 分支, DOLFINx 后端) 复现 ABAQUS 的双线性弹塑性
+RVE 结果 (微结构样本 VF_2_ParVF_1_Agg_2), 验证该后端能否得到同样的应力-应变曲线。
 
-对应关系（从 /FEA/uniw/files/{run_MS.py, testcase_12.py,
-agglgradcomp_intph_CPE4R_scaled_response_v4.py} 反推得到，细节见随附说明）：
+  几何:      400x400 像素, scale=0.0025 micron/pixel -> RVE 边长 Lx=Ly=1.0 micron
+  材料编码:   interphase_image 中 0=matrix, 1=interphase, 2=particle
+  颗粒:       E=70000 MPa, nu=0.3 (纯弹性)
+  基体/界面层: 双线性塑性硬化; 界面层 E0=3500*NormE MPa (NormE 取自 uni_level.txt
+             第一列), 屈服应力由 Temp_Yield_PMMA.mat 的 T-sigma_y 表插值得到
+  边界条件:   周期性边界条件 + free-lateral (y 方向不约束) 单轴 x 向拉伸
+  加载:       单调准静态, 最终工程应变 10.5%; *Plastic 表在 15% 总应变处截断
+             (代码写死 0.15), 之后做完美塑性外推
 
-  几何:    400x400 像素, scale = 0.0025 micron/pixel -> RVE 边长 Lx=Ly=1.0 micron
-  材料编码: interphase_image 中 0=matrix, 1=interphase(单层, 20像素), 2=particle
-            (ElementSet.from_matl_img 按数值升序排序，顺序正好对应)
-  颗粒:     E=70000 MPa, nu=0.3, rho=2.65e-15 kg/micron^3 (纯弹性)
-  基体:     E0=3500 MPa, nu=0.3, rho=1.18e-15, 双线性 (bilinear) 塑性硬化
-  界面层:   E0=3500*NormE MPa (NormE 取自 uni_level.txt 第一列),
-            nu=0.3, rho=1.18e-15 (代码里界面密度用的也是 Rou_mat, 不是 Rou_int),
-            双线性塑性硬化, 屈服应力由 Temp_Yield_PMMA.mat 的 T-sigma_y 表插值得到
-  边界条件: 周期性边界条件(PeriodicBoundaryCondition) + confined 单轴 x 向拉伸
-            (原 .inp 里 BOTMLEFT 全约束, BOTMRIGHT 只压 y, TOPLEFT 压 x,
-            BOTMRIGHT 施加 x 位移) —— 与 microstructure_ve README quickstart
-            里的 "confined" x-drive 完全一致
-  加载:     单调准静态, 最终工程应变 = 0.105*scale*X / (X*scale) = 0.105 (10.5%)
-            *Plastic 表在 15% 总应变处截断(代码写死 0.15), 之后按 ABAQUS
-            *Plastic 惯例做完美塑性外推 (PlasticMaterial/ dolfinx 后端一致)
+这是粗网格冒烟测试 (COARSEN=8 把 400x400 降采样到 50x50, N_STEPS=4), 用来快速
+确认曲线形状和量级对不对; 对应的全分辨率版本见 full_resolution/run_msve_full.py。
 
-在装好 microstructure_ve + dolfinx + dolfinx_mpc + basix + petsc4py 的 conda 环境
-(见仓库根目录 README 的 Setup 部分) 里直接跑:
-
+跑法 (见仓库根目录 README 的 Setup 部分):
     conda activate microstructure-ve
     python run_msve_comparison.py
-
-400x400 像素 = 401x401 节点 = 约 32 万自由度。这比 docs/dolfinx_backend_design.md
-里 2D benchmark 记录的最大档 (256^2, 13.2万dof, LU一次~20-30s) 还大不少，而这里
-每个 Static step 内部要做多次牛顿迭代、每次迭代都要重新LU分解一次同样规模的复数
-矩阵，41 个 step 顺序算完可能要几十分钟到数小时。所以脚本默认先用 COARSEN=4
-把图像降采样到 100x100（RVE物理尺寸不变，只是网格粗一些）快速跑通整条流程、
-看曲线形状和量级是否对得上，确认没问题后再把 COARSEN 改成 1、N_STEPS 加大到
-40+ 去跑全分辨率的定量比较。
 """
 import os
 
@@ -125,8 +108,7 @@ def build_simulation():
     int_ys, int_eps = bilinear_plastic_table(Y0_int, E0_int)
 
     # --- 几何: 节点/单元网格 (2D 平面应变, CPE4 全积分 —— DOLFINx Q1 的紧配对;
-    #     legacy ABAQUS 用的是 CPE4R 缩减积分, 二者预期有 ~3-4% 的系统性差异,
-    #     这是 dolfinx_backend_design.md §5/§9 里记录过的已知 gap, 不是 bug) ---
+    #     ABAQUS 用的是 CPE4R 缩减积分, 二者预期有 ~3-4% 的系统性差异, 不是 bug) ---
     nodes = GridNodes.from_matl_img(img, scale=eff_scale)
     elements = GridElements(nodes, type="CPE4")
 
@@ -140,8 +122,8 @@ def build_simulation():
                          yield_stress=int_ys, plastic_strain=int_eps),
     ]
 
-    # --- 边界条件: confined 周期性 x 向单轴拉伸 (对应 legacy .inp 里
-    #     BOTMLEFT=origin 全约束, BOTMRIGHT=x_drive 压 y, TOPLEFT=y_drive 压 x) ---
+    # --- 边界条件: 周期性 + free-lateral (y 方向不约束) 单轴 x 向拉伸
+    #     (origin 全约束, x_drive 压 y 并施加 x 位移, y_drive 只压 x, y 方向自由) ---
     origin, x_drive, y_drive = (nodes.nsets[k] for k in ("X0Y0", "X1Y0", "X0Y1"))
     bcs = [
         PeriodicBoundaryCondition(nodes=nodes),
@@ -177,17 +159,14 @@ def main():
     print(f"built simulation: {n_steps} Static steps, "
           f"{sim.model.nodes.shape} node grid ({time.time()-t0:.1f}s)")
 
-    # (可选) 先只用 numpy/scipy 生成 .inp, 跟 legacy 生成器的输出做人工比对
-    # (材料卡/单元数/节点数/*Equation 数量应该完全一致, 除了单元类型 CPE4 vs CPE4R):
+    # 生成 .inp 文件, 用于人工核对材料卡/单元数/节点数是否符合预期 (不会提交给 ABAQUS 跑)
     from microstructure_ve.backends.abaqus import write_inp
     inp_path = f"{BASE}/vf2_parvf1_agg2_check.inp"
     write_inp(sim, inp_path)
-    print(f"wrote {inp_path} for a manual sanity diff against the legacy .inp")
+    print(f"wrote {inp_path}")
 
-    # 用 DOLFINx 后端求解 (需要 fenicsx conda 环境, 见 docs/dolfinx_backend_design.md)
-    # 注意: run() 内部没有逐 step 的进度回调, 41 个塑性 Static step 顺序求解,
-    # 网格越大单个 step 里的牛顿迭代+LU分解越慢, 这一行可能跑很久, 请耐心等待
-    # (可以先用脚本顶部 COARSEN=4 的粗网格冒烟测试确认流程没问题)。
+    # 用 DOLFINx 后端求解; run() 内部没有逐 step 的进度回调, 顺序求解 N_STEPS 个
+    # 塑性 Static step, 网格越大/步数越多越慢
     from microstructure_ve.backends.dolfinx import run
     t1 = time.time()
     rows = run(sim)  # (N_STEPS, 7): [frame, RF_x, RF_y, 0, 0, U_x, U_y]
@@ -203,7 +182,7 @@ def main():
     np.savetxt(out_path, out, delimiter="\t", header="strain\tstress_MPa", comments="")
     print(f"wrote {out_path}")
 
-    # 跟已有 ABAQUS S-E.txt 比较 (S-E.txt: 前半是应力数组, 后半是应变数组, 等长)
+    # 跟 S-Eabaqus.txt 比较 (前半是应力数组, 后半是应变数组, 等长)
     se = np.loadtxt(ABAQUS_SE_TXT)
     n = len(se) // 2
     abq_stress, abq_strain = se[:n], se[n:]

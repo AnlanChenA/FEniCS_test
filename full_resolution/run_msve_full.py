@@ -2,15 +2,14 @@
 全分辨率(400x400)严谨版本: 用 microstructure-ve (plastic 分支, DOLFINx 后端) 复现
 VF_2_ParVF_1_Agg_2 的 ABAQUS bilinear elastoplastic 结果。
 
-跟 testfinx/run_msve_comparison.py 的区别:
+跟仓库根目录的 run_msve_comparison.py 的区别:
   - COARSEN 固定为 1, 用完整 400x400 网格 (约32万自由度), 不做降采样冒烟测试。
-  - 加载点不再是均匀 linspace, 而是直接取 testfinx/S-Eabaqus.txt 里 ABAQUS 记录的
+  - 加载点不再是均匀 linspace, 而是直接取根目录 S-Eabaqus.txt 里 ABAQUS 记录的
     13 个应变点, 这样两条曲线在完全相同的应变上做逐点比较, 不需要插值, 更严谨。
 
-材料/几何/边界条件的映射关系跟 run_msve_comparison.py 里写的完全一样 (400x400像素,
+材料/几何/边界条件跟 run_msve_comparison.py 完全一样 (400x400像素,
 scale=0.0025um/pixel, interphase_image 0/1/2=matrix/interphase/particle, 双线性
-塑性硬化, 周期性边界条件 + free-lateral 单轴 x 向拉伸 —— 注意: 不是 confined,
-TOPLEFT 的 y 位移在原 .inp 里从未被约束或驱动, 详见此前的讨论)。
+塑性硬化, 周期性边界条件 + free-lateral 单轴 x 向拉伸, y 方向不约束)。
 
 free-lateral 路径每个 Static step 内部要做 20 个子增量 x 外层根查找(最多25次) x
 牛顿迭代(每次都要重新LU分解约32万自由度的复数矩阵), 13 个 step 顺序求解, 预计要
@@ -107,8 +106,7 @@ def build_simulation():
     int_ys, int_eps = bilinear_plastic_table(Y0_int, E0_int)
 
     # --- 几何: 节点/单元网格 (2D 平面应变, CPE4 全积分 —— DOLFINx Q1 的紧配对;
-    #     legacy ABAQUS 用的是 CPE4R 缩减积分, 二者预期有 ~3-4% 的系统性差异,
-    #     这是 dolfinx_backend_design.md §5/§9 里记录过的已知 gap, 不是 bug) ---
+    #     ABAQUS 用的是 CPE4R 缩减积分, 二者预期有 ~3-4% 的系统性差异, 不是 bug) ---
     nodes = GridNodes.from_matl_img(img, scale=scale)
     elements = GridElements(nodes, type="CPE4")
 
@@ -162,7 +160,7 @@ def main():
     from microstructure_ve.backends.abaqus import write_inp
     inp_path = f"{OUT_DIR}/vf2_parvf1_agg2_full_check.inp"
     write_inp(sim, inp_path)
-    print(f"wrote {inp_path} for a manual sanity diff against the legacy .inp")
+    print(f"wrote {inp_path}")
 
     from microstructure_ve.backends.dolfinx import run
     t1 = time.time()
