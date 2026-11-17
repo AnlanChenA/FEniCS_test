@@ -16,8 +16,9 @@ free-lateral 路径每个 Static step 内部要做 20 个子增量 x 外层根�
 牛顿迭代(每次都要重新LU分解约32万自由度的复数矩阵), 13 个 step 顺序求解, 预计要
 远超之前 50x50 粗网格版本的耗时, 可能几十分钟到数小时, 请耐心等待。
 
-跑法 (同一个 conda 环境):
-    /Users/anlan/anaconda3/envs/microstructure-ve/bin/python3.12 run_msve_full.py
+跑法 (同一个 conda 环境, 见仓库根目录 README 的 Setup 部分):
+    conda activate microstructure-ve
+    python run_msve_full.py
 """
 import os
 
@@ -39,14 +40,18 @@ from microstructure_ve.boundary import (
 from microstructure_ve.steps import Model, Simulation, Step, Static, Heading
 
 # ------------------------------------------------------------------ 1. 输入/输出路径
-# 假设所有输入文件都跟这个脚本放在同一个文件夹里
+# 原始 .mat/.txt 输入和参考曲线放在仓库根目录(跟 run_msve_comparison.py 共用,
+# 不在 full_resolution/ 里重复存一份), 本脚本自己的输出(.inp / S-Emsve-full.txt)
+# 仍然写回 full_resolution/ 这个文件夹
 BASE = os.path.dirname(os.path.abspath(__file__))
-INTPH_IMAGE_MAT = f"{BASE}/b=0.03_e=0.929_z=0_UniIP_IP1_20pix_intph.mat"  # 400x400, 0/1/2
-UNI_LEVEL_TXT = f"{BASE}/uni_level.txt"          # 界面层 [NormE, deltaTg]
-YIELD_MAT = f"{BASE}/Temp_Yield_PMMA.mat"        # Temp_sigmaY: [T, sigma_y, ...]
+ROOT_DIR = os.path.dirname(BASE)
+DATA_DIR = f"{ROOT_DIR}/data"
+INTPH_IMAGE_MAT = f"{DATA_DIR}/b=0.03_e=0.929_z=0_UniIP_IP1_20pix_intph.mat"  # 400x400, 0/1/2
+UNI_LEVEL_TXT = f"{DATA_DIR}/uni_level.txt"          # 界面层 [NormE, deltaTg]
+YIELD_MAT = f"{DATA_DIR}/Temp_Yield_PMMA.mat"        # Temp_sigmaY: [T, sigma_y, ...]
 
 OUT_DIR = BASE
-ABAQUS_SE_TXT = f"{BASE}/S-Eabaqus.txt"          # 前半=应力(MPa), 后半=应变
+ABAQUS_SE_TXT = f"{ROOT_DIR}/S-Eabaqus.txt"      # 前半=应力(MPa), 后半=应变
 
 # ------------------------------------------------------------------ 2. 材料参数 (硬编码, 抄自
 #    agglgradcomp_intph_CPE4R_scaled_response_v4.py 的 run_FEA / assignMatPara)

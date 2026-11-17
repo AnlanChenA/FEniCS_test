@@ -11,15 +11,37 @@ matching the original ABAQUS `.inp` deck.
 
 ## Files
 
+- `data/` — microstructure image, interphase level, and yield-stress table
+  for sample `VF_2_ParVF_1_Agg_2`; shared by both scripts below.
 - `run_msve_comparison.py` — coarse smoke test (see below).
-- `full_resolution/run_msve_full.py` — full-resolution, quantitative version.
+- `full_resolution/run_msve_full.py` — full-resolution, quantitative version
+  (reads `data/` and `S-Eabaqus.txt` from the repo root).
 - `S-Eabaqus.txt` — reference ABAQUS stress-strain curve (13 points).
 - `S-Emsve.txt` — DOLFINx result from the coarse smoke test (4 points).
 - `test.py`, `rve.inp` — minimal quickstart example, unrelated to the
   comparison above.
 
-Run with the `microstructure-ve` conda environment
-(`microstructure_ve` + `dolfinx` + `dolfinx_mpc` + `basix` + `petsc4py`).
+Everything needed to run both scripts is self-contained in this repo — no
+paths outside it are referenced.
+
+## Setup
+
+```bash
+conda create -n microstructure-ve python=3.12
+conda activate microstructure-ve
+conda install -c conda-forge fenics-dolfinx dolfinx_mpc fenics-basix petsc4py
+pip install git+https://github.com/richardsheridan/microstructure-ve.git@65d63c05dc2c1ed49ca6a6d6d1f491dcb47e2144
+```
+
+The last command pins the exact commit these results were produced with
+(the `plastic` branch has moved since); drop the commit hash for the latest
+`plastic` branch instead, at your own risk of drift.
+
+```bash
+git clone https://github.com/AnlanChenA/FEniCS_test.git
+cd FEniCS_test
+python run_msve_comparison.py
+```
 
 ## Coarse smoke test
 
@@ -53,9 +75,8 @@ validation.
 
 `full_resolution/run_msve_full.py` uses the true 400×400 mesh (~321,602
 DOF) and solves directly at ABAQUS's 13 recorded strain points instead of
-interpolating. It has **not yet completed a run**; the input data files
-(`*.mat`, `uni_level.txt`) still need to be copied in alongside the script,
-and the expected wall-clock time is likely underestimated.
+interpolating. It has **not yet completed a run**, and the expected
+wall-clock time is likely underestimated.
 
 Why it's slow:
 

@@ -21,10 +21,11 @@ agglgradcomp_intph_CPE4R_scaled_response_v4.py} 反推得到，细节见随附�
             *Plastic 表在 15% 总应变处截断(代码写死 0.15), 之后按 ABAQUS
             *Plastic 惯例做完美塑性外推 (PlasticMaterial/ dolfinx 后端一致)
 
-在 /Users/anlan/anaconda3/envs/microstructure-ve 这个 conda 环境（已确认装好了
-microstructure_ve + dolfinx + dolfinx_mpc + basix + petsc4py）里直接跑:
+在装好 microstructure_ve + dolfinx + dolfinx_mpc + basix + petsc4py 的 conda 环境
+(见仓库根目录 README 的 Setup 部分) 里直接跑:
 
-    /Users/anlan/anaconda3/envs/microstructure-ve/bin/python3.12 run_msve_comparison.py
+    conda activate microstructure-ve
+    python run_msve_comparison.py
 
 400x400 像素 = 401x401 节点 = 约 32 万自由度。这比 docs/dolfinx_backend_design.md
 里 2D benchmark 记录的最大档 (256^2, 13.2万dof, LU一次~20-30s) 还大不少，而这里
@@ -55,16 +56,15 @@ from microstructure_ve.boundary import (
 from microstructure_ve.steps import Model, Simulation, Step, Static, Heading
 
 # ------------------------------------------------------------------ 1. 输入文件路径
-BASE = "/Users/anlan/Desktop/elastoplastic"
-CASE_DIR = f"{BASE}/FEA/uniw/VF_2_ParVF_1_Agg_2"
-INTPH_IMAGE_MAT = f"{CASE_DIR}/b=0.03_e=0.929_z=0_UniIP_IP1_20pix_intph.mat"  # 400x400, 0/1/2
-UNI_LEVEL_TXT = f"{CASE_DIR}/uni_level.txt"          # 界面层 [NormE, deltaTg]
-YIELD_MAT = f"{BASE}/FEA/uniw/files/Temp_Yield_PMMA.mat"  # Temp_sigmaY: [T, sigma_y, ...]
-ABAQUS_SE_TXT = f"{BASE}/FEA/uniw/S-E.txt"            # 已有 ABAQUS 结果:
+# 全部放在本仓库里，跟脚本自身位置相对定位，不再依赖 /Users/anlan/Desktop/elastoplastic
+BASE = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = f"{BASE}/data"
+INTPH_IMAGE_MAT = f"{DATA_DIR}/b=0.03_e=0.929_z=0_UniIP_IP1_20pix_intph.mat"  # 400x400, 0/1/2
+UNI_LEVEL_TXT = f"{DATA_DIR}/uni_level.txt"          # 界面层 [NormE, deltaTg]
+YIELD_MAT = f"{DATA_DIR}/Temp_Yield_PMMA.mat"        # Temp_sigmaY: [T, sigma_y, ...]
+ABAQUS_SE_TXT = f"{BASE}/S-Eabaqus.txt"               # 已有 ABAQUS 结果 (13点精选曲线,
+                                                        # 跟 full_resolution/ 用的是同一份):
                                                         # 前半段=应力(MPa), 后半段=应变
-                                                        # !!确认这份 S-E.txt 确实是
-                                                        # VF_2_ParVF_1_Agg_2 这个微结构
-                                                        # 跑出来的，而不是别的样本!!
 
 # ------------------------------------------------------------------ 2. 材料参数 (硬编码, 抄自
 #    agglgradcomp_intph_CPE4R_scaled_response_v4.py 的 run_FEA / assignMatPara)
